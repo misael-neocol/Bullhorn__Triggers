@@ -3,4 +3,6 @@
 # But do not ignore the .gitignore file itself
 !/01__Triggers__Clonning_Opp_Products/.gitignore
 # And do not ignore the specific trigger file
-!/01__Triggers__Clonning_Opp_Products/BH_Clonning_Opp_Products/force-app/main/default/triggers/NEO_OpportunitylineitemTrigger.trigger
+!/force-app/main/default/triggers/NEO_OpportunitylineitemTrigger__Backup.trigger
+
+!/force-app/main/default/triggers/NEO_OpportunitylineitemTrigger.trigger
