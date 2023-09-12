@@ -6,3 +6,6 @@
 !/force-app/main/default/triggers/NEO_OpportunitylineitemTrigger__Backup.trigger
 
 !/force-app/main/default/triggers/NEO_OpportunitylineitemTrigger.trigger
+
+!.eslintignore
+!.eslintrc.json
