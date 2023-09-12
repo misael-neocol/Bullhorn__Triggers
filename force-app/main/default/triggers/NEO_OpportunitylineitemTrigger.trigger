@@ -1,132 +1,87 @@
-trigger NEO_OpportunitylineitemTrigger on OpportunityLineItem(after delete) {
-  try {
-    if (Trigger.isDelete && Trigger.isAfter) {
-      List<OpportunityLineItem> clonedOpportunityLineItems = new List<OpportunityLineItem>();
+trigger NEO_OpportunitylineitemTrigger on OpportunityLineItem (after delete) {
+    try {
+        if (Trigger.isDelete && Trigger.isAfter) {
+            List<OpportunityLineItem> clonedOpportunityLineItems = new List<OpportunityLineItem>();
+            Set<Id> oppIds = new Set<Id>();
+            Set<Id> quoteLineIds = new Set<Id>();
 
-      // Collect Opportunity Ids and Quote Line Ids from deleted Opportunity Line Items
-      Set<Id> oppIds = new Set<Id>();
-      Set<Id> quoteLineIds = new Set<Id>();
+            for (OpportunityLineItem oli : Trigger.old) {
+                oppIds.add(oli.OpportunityId);
+                quoteLineIds.add(oli.SBQQ__QuoteLine__c);
+            }
 
-      for (OpportunityLineItem oli : Trigger.old) {
-        oppIds.add(oli.OpportunityId);
-        quoteLineIds.add(oli.SBQQ__QuoteLine__c);
-      }
+            // System.debug('MVM-> oppIds: ' + oppIds);
+            // System.debug('MVM-> quoteLineIds: ' + quoteLineIds);
 
-      System.debug('MVM-> oppIds: ' + oppIds);
-      System.debug('MVM-> quoteLineIds: ' + quoteLineIds);
+            // Query related Quotes based on Opportunity Ids, sorted by CreatedDate
+            List<SBQQ__Quote__c> relatedQuotes = [
+                SELECT Id, SBQQ__Primary__c, SBQQ__Opportunity2__c, CreatedDate
+                FROM SBQQ__Quote__c
+                WHERE SBQQ__Primary__c = true AND SBQQ__Opportunity2__c IN :oppIds
+                ORDER BY CreatedDate DESC
+            ];
 
-      // Query related Quotes based on Opportunity Ids
-      List<SBQQ__Quote__c> relatedQuotes = [
-        SELECT Id, SBQQ__Primary__c, SBQQ__Opportunity2__c
-        FROM SBQQ__Quote__c
-        WHERE SBQQ__Primary__c = true AND SBQQ__Opportunity2__c IN :oppIds 
-      ];
+            // System.debug('MVM-> relatedQuotes: ' + relatedQuotes);
 
-      // Query related Quote Lines to get custom fields
-      Map<Id, SBQQ__QuoteLine__c> quoteLineMap = new Map<Id, SBQQ__QuoteLine__c>(
-        [
-          SELECT
-            Id,
-            NEO_Year_1_ACV__c,
-            NEO_Year_2_ACV__c,
-            NEO_Year_3_ACV__c,
-            NEO_Year_4_ACV__c,
-            NEO_Year_5_ACV__c,
-            NEO_Total_Monthly_Net_Unit_Price__c,
-            NEO_Effective_Start_Date__c,
-            SBQQ__EffectiveEndDate__c
-          FROM SBQQ__QuoteLine__c
-          WHERE Id IN :quoteLineIds
-        ]
-      );
+            // Create a map of Opportunity Id to the most recent primary Quote
+            Map<Id, SBQQ__Quote__c> oppToLatestPrimaryQuoteMap = new Map<Id, SBQQ__Quote__c>();
+            for (SBQQ__Quote__c quote : relatedQuotes) {
+                if (!oppToLatestPrimaryQuoteMap.containsKey(quote.SBQQ__Opportunity2__c)) {
+                    oppToLatestPrimaryQuoteMap.put(quote.SBQQ__Opportunity2__c, quote);
+                }
+            }
 
-      System.debug('MVM-> quoteLineMap: ' + quoteLineMap);
+            // System.debug('MVM-> oppToLatestPrimaryQuoteMap: ' + oppToLatestPrimaryQuoteMap);
 
-      // Create a map of Opportunity Id to Quote for easy lookup
-      Map<Id, SBQQ__Quote__c> oppToQuoteMap = new Map<Id, SBQQ__Quote__c>();
-      for (SBQQ__Quote__c quote : relatedQuotes) {
-        oppToQuoteMap.put(quote.SBQQ__Opportunity2__c, quote);
-      }
+            // Query related Quote Lines to get custom fields
+            Map<Id, SBQQ__QuoteLine__c> quoteLineMap = new Map<Id, SBQQ__QuoteLine__c>([
+                SELECT Id, NEO_Year_1_ACV__c, NEO_Year_2_ACV__c, NEO_Year_3_ACV__c, NEO_Year_4_ACV__c, NEO_Year_5_ACV__c, NEO_Total_Monthly_Net_Unit_Price__c, NEO_Effective_Start_Date__c, SBQQ__EffectiveEndDate__c
+                FROM SBQQ__QuoteLine__c
+                WHERE Id IN :quoteLineIds
+            ]);
 
-      System.debug('MVM-> oppToQuoteMap: ' + oppToQuoteMap);
+            // System.debug('MVM-> quoteLineMap: ' + quoteLineMap);
 
-      // Loop through deleted Opportunity Line Items
-      for (OpportunityLineItem oli : Trigger.old) {
-        SBQQ__Quote__c relatedQuote = oppToQuoteMap.get(oli.OpportunityId);
+            // Loop through deleted Opportunity Line Items
+            for (OpportunityLineItem oli : Trigger.old) {
+                SBQQ__Quote__c relatedQuote = oppToLatestPrimaryQuoteMap.get(oli.OpportunityId);
 
-        System.debug('MVM-> relatedQuote: ' + relatedQuote);
+                // System.debug('MVM-> relatedQuote: ' + relatedQuote);
 
-        // Check if related Quote's SBQQ__Primary__c field is set to true
-        if (relatedQuote != null && relatedQuote.SBQQ__Primary__c == true) {
-          OpportunityLineItem clonedOli = oli.clone(false, false, false, false);
+                if (relatedQuote != null && relatedQuote.SBQQ__Primary__c == true) {
+                    OpportunityLineItem clonedOli = oli.clone(false, false, false, false);
+                    SBQQ__QuoteLine__c relatedQuoteLine = quoteLineMap.get(oli.SBQQ__QuoteLine__c);
+                    if (relatedQuoteLine != null) {
 
-          System.debug('MVM-> clonedOli__Before: ' + clonedOli);
-1
-          // Populate custom fields from SBQQ__QuoteLine__c
-          SBQQ__QuoteLine__c relatedQuoteLine = quoteLineMap.get(
-            oli.SBQQ__QuoteLine__c
-          );
-          if (relatedQuoteLine != null) {
-            System.debug(
-              'MVM-> relatedQuoteLine.NEO_Year_1_ACV__c: ' +
-              relatedQuoteLine.NEO_Year_1_ACV__c
-            );
-            System.debug(
-              'MVM-> relatedQuoteLine.NEO_Year_2_ACV__c: ' +
-              relatedQuoteLine.NEO_Year_2_ACV__c
-            );
-            System.debug(
-              'MVM-> relatedQuoteLine.NEO_Year_3_ACV__c: ' +
-              relatedQuoteLine.NEO_Year_3_ACV__c
-            );
-            System.debug(
-              'MVM-> relatedQuoteLine.NEO_Year_4_ACV__c: ' +
-              relatedQuoteLine.NEO_Year_4_ACV__c
-            );
-            System.debug(
-              'MVM-> relatedQuoteLine.NEO_Year_5_ACV__c: ' +
-              relatedQuoteLine.NEO_Year_5_ACV__c
-            );
+                        // System.debug('MVM-> relatedQuoteLine: ' + relatedQuoteLine);
 
-            clonedOli.NEO_Effective_Start_Date__c = relatedQuoteLine.NEO_Effective_Start_Date__c;
-            clonedOli.NEO_Calculated_End_Date__c = relatedQuoteLine.SBQQ__EffectiveEndDate__c;
-            clonedOli.NEO_Year_1_ACV__c = relatedQuoteLine.NEO_Year_1_ACV__c;
-            clonedOli.NEO_Year_2_ACV__c = relatedQuoteLine.NEO_Year_2_ACV__c;
-            clonedOli.NEO_Year_3_ACV__c = relatedQuoteLine.NEO_Year_3_ACV__c;
-            clonedOli.NEO_Year_4_ACV__c = relatedQuoteLine.NEO_Year_4_ACV__c;
-            clonedOli.NEO_Year_5_ACV__c = relatedQuoteLine.NEO_Year_5_ACV__c;
-            clonedOli.Quantity = 0;
-            clonedOli.NEO_Total_Monthly_Net_Unit_Price__c = relatedQuoteLine.NEO_Total_Monthly_Net_Unit_Price__c; // MRR
-            clonedOli.TotalPrice = null;
-          }
+                        clonedOli.NEO_Effective_Start_Date__c = relatedQuoteLine.NEO_Effective_Start_Date__c;
+                        clonedOli.NEO_Calculated_End_Date__c = relatedQuoteLine.SBQQ__EffectiveEndDate__c;
+                        clonedOli.NEO_Year_1_ACV__c = relatedQuoteLine.NEO_Year_1_ACV__c;
+                        clonedOli.NEO_Year_2_ACV__c = relatedQuoteLine.NEO_Year_2_ACV__c;
+                        clonedOli.NEO_Year_3_ACV__c = relatedQuoteLine.NEO_Year_3_ACV__c;
+                        clonedOli.NEO_Year_4_ACV__c = relatedQuoteLine.NEO_Year_4_ACV__c;
+                        clonedOli.NEO_Year_5_ACV__c = relatedQuoteLine.NEO_Year_5_ACV__c;
+                        clonedOli.Quantity = 0;
+                        clonedOli.NEO_Total_Monthly_Net_Unit_Price__c = relatedQuoteLine.NEO_Total_Monthly_Net_Unit_Price__c;
+                        clonedOli.TotalPrice = null;
+                    }
 
-          System.debug('MVM-> clonedOli__After: ' + clonedOli);
+                    // System.debug('MVM-> clonedOli__After: ' + clonedOli);
 
-          // Add the cloned Opportunity Line Item to the list
-          clonedOpportunityLineItems.add(clonedOli);
+                    clonedOpportunityLineItems.add(clonedOli);
+                }
+            }
 
-          System.debug(
-            'MVM-> clonedOpportunityLineItems__After: ' +
-            clonedOpportunityLineItems
-          );
+            System.debug('MVM-> clonedOpportunityLineItems__After: ' + clonedOpportunityLineItems);
+
+            // Insert cloned Opportunity Line Items if any
+            if (clonedOpportunityLineItems.size() > 0) {
+                // System.debug('MVM-> clonedOpportunityLineItems.size(): ' + clonedOpportunityLineItems.size());
+                insert clonedOpportunityLineItems;
+            }
         }
-      }
-
-      // Insert cloned Opportunity Line Items if any
-      if (clonedOpportunityLineItems.size() > 0) {
-        System.debug(
-          'MVM-> clonedOpportunityLineItems.size(): ' +
-          clonedOpportunityLineItems.size()
-        );
-        System.debug(
-          'MVM-> clonedOpportunityLineItems: ' + clonedOpportunityLineItems
-        );
-
-        insert clonedOpportunityLineItems;
-      }
+    } catch (Exception e) {
+        System.debug('An error occurred: ' + e.getMessage());
     }
-  } catch (Exception e) {
-    // Log the exception for debugging
-    System.debug('An error occurred: ' + e.getMessage());
-  }
 }
