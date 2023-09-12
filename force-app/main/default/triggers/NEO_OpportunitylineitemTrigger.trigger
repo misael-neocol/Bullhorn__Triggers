@@ -6,6 +6,7 @@ trigger NEO_OpportunitylineitemTrigger on OpportunityLineItem(after delete) {
       // Collect Opportunity Ids and Quote Line Ids from deleted Opportunity Line Items
       Set<Id> oppIds = new Set<Id>();
       Set<Id> quoteLineIds = new Set<Id>();
+
       for (OpportunityLineItem oli : Trigger.old) {
         oppIds.add(oli.OpportunityId);
         quoteLineIds.add(oli.SBQQ__QuoteLine__c);
@@ -18,7 +19,7 @@ trigger NEO_OpportunitylineitemTrigger on OpportunityLineItem(after delete) {
       List<SBQQ__Quote__c> relatedQuotes = [
         SELECT Id, SBQQ__Primary__c, SBQQ__Opportunity2__c
         FROM SBQQ__Quote__c
-        WHERE SBQQ__Opportunity2__c IN :oppIds
+        WHERE SBQQ__Primary__c = true AND SBQQ__Opportunity2__c IN :oppIds 
       ];
 
       // Query related Quote Lines to get custom fields
@@ -31,7 +32,9 @@ trigger NEO_OpportunitylineitemTrigger on OpportunityLineItem(after delete) {
             NEO_Year_3_ACV__c,
             NEO_Year_4_ACV__c,
             NEO_Year_5_ACV__c,
-            NEO_Total_Monthly_Net_Unit_Price__c
+            NEO_Total_Monthly_Net_Unit_Price__c,
+            NEO_Effective_Start_Date__c,
+            SBQQ__EffectiveEndDate__c
           FROM SBQQ__QuoteLine__c
           WHERE Id IN :quoteLineIds
         ]
@@ -58,7 +61,7 @@ trigger NEO_OpportunitylineitemTrigger on OpportunityLineItem(after delete) {
           OpportunityLineItem clonedOli = oli.clone(false, false, false, false);
 
           System.debug('MVM-> clonedOli__Before: ' + clonedOli);
-
+1
           // Populate custom fields from SBQQ__QuoteLine__c
           SBQQ__QuoteLine__c relatedQuoteLine = quoteLineMap.get(
             oli.SBQQ__QuoteLine__c
@@ -85,6 +88,8 @@ trigger NEO_OpportunitylineitemTrigger on OpportunityLineItem(after delete) {
               relatedQuoteLine.NEO_Year_5_ACV__c
             );
 
+            clonedOli.NEO_Effective_Start_Date__c = relatedQuoteLine.NEO_Effective_Start_Date__c;
+            clonedOli.NEO_Calculated_End_Date__c = relatedQuoteLine.SBQQ__EffectiveEndDate__c;
             clonedOli.NEO_Year_1_ACV__c = relatedQuoteLine.NEO_Year_1_ACV__c;
             clonedOli.NEO_Year_2_ACV__c = relatedQuoteLine.NEO_Year_2_ACV__c;
             clonedOli.NEO_Year_3_ACV__c = relatedQuoteLine.NEO_Year_3_ACV__c;
